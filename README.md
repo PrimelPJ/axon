@@ -7,30 +7,26 @@ machine learning inference infrastructure.
 Built to the operational requirements of high-throughput ML serving systems —
 think the layer in front of your model servers that lets you ship faster and sleep better.
 
-[![CI](https://github.com/PrimelPJ/axon/actions/workflows/ci.yml/badge.svg)](https://github.com/PrimelPJ/axon/actions/workflows/ci.yml)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
 ---
 
 ## Architecture
 
 ```
                          ┌─────────────────────────────────────────────┐
-                         │              Axon Gateway                    │
-                         │                                              │
+                         │              Axon Gateway                   │
+                         │                                             │
  Client ──HTTP──▶        │  ObservabilityMiddleware  (request ID, log) │
-                         │         ↓                                    │
+                         │         ↓                                   │
                          │  AuthMiddleware            (JWT / API key)  │
-                         │         ↓                                    │
-                         │  RateLimitMiddleware       (sliding window)  │
-                         │         ↓                                    │
+                         │         ↓                                   │
+                         │  RateLimitMiddleware       (sliding window) │
+                         │         ↓                                   │
                          │  RouteRegistry             (prefix match)   │
-                         │         ↓                                    │
+                         │         ↓                                   │
                          │  LoadBalancer              (WRR / LC / RR)  │
-                         │         ↓                                    │
+                         │         ↓                                   │
                          │  CircuitBreaker            (Redis-backed)   │
-                         │         ↓                                    │
+                         │         ↓                                   │
                          │  ReverseProxy              (httpx async)    │
                          └──────────────┬──────────────────────────────┘
                                         │
