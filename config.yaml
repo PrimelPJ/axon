@@ -1,0 +1,96 @@
+# Axon Gateway Configuration
+# Override any value via AXON_ environment variables.
+# Example: AXON_PORT=9000, AXON_REDIS__URL=redis://myhost:6379/1
+
+auth:
+  jwt_algorithm: HS256
+  jwt_secret: ""          # Set via AXON_AUTH__JWT_SECRET env var
+  api_key_header: X-API-Key
+
+redis:
+  url: redis://localhost:6379/0
+  max_connections: 20
+  key_prefix: "axon:"
+
+rate_limit:
+  enabled: true
+  algorithm: sliding_window
+  requests_per_second: 100
+  burst: 200
+  key_func: api_key        # ip | api_key | user_id
+
+circuit_breaker:
+  enabled: true
+  failure_threshold: 5
+  recovery_timeout_seconds: 30
+  half_open_max_calls: 3
+  expected_exception_codes: [500, 502, 503, 504]
+
+observability:
+  metrics_enabled: true
+  metrics_path: /metrics
+  tracing_enabled: false
+  otlp_endpoint: http://localhost:4317
+  service_name: axon-gateway
+  log_level: INFO
+  log_format: json         # json | console
+  request_id_header: X-Request-ID
+  slow_request_threshold_ms: 1000
+
+routes:
+  # ML inference endpoint — multiple replicas, weighted for A/B testing
+  - path: /v1/predict
+    require_auth: true
+    load_balancer: weighted_round_robin
+    timeout_seconds: 30
+    retries: 2
+    retry_on: [502, 503, 504]
+    allowed_methods: [POST]
+    upstreams:
+      - url: http://model-v2:8000
+        weight: 9
+      - url: http://model-v3-canary:8000
+        weight: 1
+    circuit_breaker:
+      enabled: true
+      failure_threshold: 3
+      recovery_timeout_seconds: 20
+
+  # Batch inference — higher timeout, least-connections balancing
+  - path: /v1/predict/batch
+    require_auth: true
+    load_balancer: least_connections
+    timeout_seconds: 120
+    retries: 1
+    allowed_methods: [POST]
+    rate_limit_override:
+      enabled: true
+      algorithm: token_bucket
+      requests_per_second: 10
+      burst: 20
+      key_func: api_key
+    upstreams:
+      - url: http://batch-worker-1:8001
+        weight: 1
+      - url: http://batch-worker-2:8001
+        weight: 1
+
+  # Model metadata — public read endpoint
+  - path: /v1/models
+    require_auth: false
+    load_balancer: round_robin
+    timeout_seconds: 10
+    retries: 1
+    allowed_methods: [GET]
+    upstreams:
+      - url: http://model-registry:8002
+
+  # Feature store — internal service, strict rate limiting
+  - path: /v1/features
+    require_auth: true
+    load_balancer: round_robin
+    timeout_seconds: 5
+    retries: 3
+    allowed_methods: [GET, POST]
+    upstreams:
+      - url: http://feature-store:8003
